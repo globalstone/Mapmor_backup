@@ -1,5 +1,6 @@
 package com.mapmory.controller.user;
 
+import java.util.List;
 import java.util.Random;
 
 import javax.mail.internet.MimeMessage;
@@ -21,6 +22,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
+import com.mapmory.services.user.dao.UserDao;
 import com.mapmory.services.user.domain.SocialLoginInfo;
 import com.mapmory.services.user.domain.User;
 import com.mapmory.services.user.service.UserService;
@@ -41,13 +43,16 @@ public class UserControllerJM {
     @Autowired
 	JavaMailSenderImpl mailSender;
     
+    @Autowired
+    UserDao userDao;
+    
     @Value("${spring.mail.username}")
     private String emailId;
     
     @GetMapping("/addUser")
 	public String addUser(Model model) throws Exception {
 	    System.out.println("/user/addUser : GET");
-	    return "user/addUser";
+	    return "user/addUserJM";
 	}
 
     @PostMapping("/addUser")
@@ -56,7 +61,7 @@ public class UserControllerJM {
                           HttpSession session) throws Exception {
         System.out.println("/user/addUser : POST");
 
-        String kakaoId = (String) session.getAttribute("tempSocialId");
+        String kakaoId = (String) session.getAttribute("kakaoId");
         if (kakaoId != null) {
             socialLoginInfo.setSocialId(kakaoId);
         }
@@ -75,44 +80,56 @@ public class UserControllerJM {
         session.removeAttribute("tempSocialId"); // 세션에서 카카오 아이디 제거
 
         if (result) {
+        	userService.addSocialLoginLink(user.getUserId(), socialLoginInfo.getSocialId());
             return "index";
         } else {
             return "redirect:/user/addUser";
         }
     }
-
-	@GetMapping(value = "kakaoLogin")
+    
+    @GetMapping(value = "kakaoLogin")
     public String kakaoLogin(@RequestParam(value = "code", required = false) String code, HttpSession session, RedirectAttributes redirectAttributes) {
         try {
             String access_Token = userServiceJM.getKakaoAccessToken(code);
             String kakaoId = userServiceJM.getKakaoUserInfo(access_Token);
 
             if (kakaoId == null) {
-                return "error"; // 카카오 사용자 정보가 없으면 에러 처리
+                return "error";
             }
-            
-            SocialLoginInfo socialLoginInfo = SocialLoginInfo.builder()
-                    .socialId(kakaoId)
-                    .build();
-            
-            String tempSocialId = userService.getSocialId(socialLoginInfo);
 
-            if (tempSocialId == null) {
-                // 카카오 사용자 정보가 없으면 회원가입 페이지로 리다이렉트
+            SocialLoginInfo socialLoginInfo = userDao.selectSocialLoginInfoBySocialId(kakaoId);
+            if (socialLoginInfo == null) {
                 session.setAttribute("kakaoId", kakaoId);
                 redirectAttributes.addAttribute("kakaoId", kakaoId);
                 return "redirect:/user/addUser";
             }
 
-            // 로그인 성공 처리
-            session.setAttribute("tempSocialId", tempSocialId);
-            return "index";
+            String userId = socialLoginInfo.getUserId();
+            User user = userService.getDetailUser(userId);
+
+            if (user != null) {
+                boolean checkSocialId = userService.checkSocialId(userId, kakaoId);
+
+                System.out.println("카카오 아이디 확인용 입니다 :::::: " + kakaoId);
+                if (!checkSocialId) {
+                    session.setAttribute("kakaoId", kakaoId);
+                    redirectAttributes.addAttribute("kakaoId", kakaoId);
+                    return "redirect:/user/addUser";
+                }
+
+                session.setAttribute("kakaoId", kakaoId);
+                return "index";
+            } else {
+                session.setAttribute("kakaoId", kakaoId);
+                redirectAttributes.addAttribute("kakaoId", kakaoId);
+                return "redirect:/user/addUser";
+            }
         } catch (Exception e) {
             e.printStackTrace();
             return "error";
         }
     }
-	
+    
 	@PostMapping("/memberPhoneCheck")
 	public @ResponseBody String memberPhoneCheck(@RequestParam(value="to") String to) throws Exception {
 

@@ -190,4 +190,10 @@
 		DELETE FROM follow_block
 		WHERE user_id=#{userId} AND target_id=#{targetId}
 	</delete>
+	
+	<select id="selectSocialLoginInfoBySocialId" parameterType="string" resultMap="socialLoginInfoSelectMap">
+    SELECT *
+    FROM social_login_info
+    WHERE social_id = #{value}
+</select>
 </mapper>

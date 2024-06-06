@@ -60,4 +60,6 @@ public interface UserDao {
 	public int getUserListTotalCount(Search search);
 	
 	public int getFollowListTotalCount(Search search);
+	
+	public SocialLoginInfo selectSocialLoginInfoBySocialId(String socialId);
 }
